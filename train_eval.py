@@ -24,7 +24,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device, e
         acc = evaluate_model(model, val_loader, device)
         if acc > best_acc:
             best_acc = acc
-            save_path = f"best_model_{model_name}.pth"
+            save_path = f"checkpoint/best_model_{model_name}.pth"
             torch.save(model.state_dict(), save_path)
             print(f"✅ 新最佳模型已保存: {save_path}，验证准确率: {acc:.4f}")
 
