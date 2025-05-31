@@ -1,0 +1,6 @@
+matplotlib==3.5.1
+numpy==1.23.2
+scikit_learn
+torch==2.6.0+cu126
+torchvision==0.21.0+cu126
+tqdm==4.67.1
