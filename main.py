@@ -29,7 +29,7 @@ if __name__ == "__main__":
         "ResNet50": get_resnet50(),
         "MobileNetV2": get_mobilenet_v2(),
         "MobileNetV3": get_mobilenet_v3(),
-        "AlexNet": get_alexnet(),
+        # "AlexNet": get_alexnet(),
         "GoogLeNet": get_googlenet()
     }
 
@@ -40,7 +40,7 @@ if __name__ == "__main__":
         "MobileNetV2": models["MobileNetV2"],
         "ResNet50": models["ResNet50"],
         "MobileNetV3": models["MobileNetV3"],
-        "AlexNet": models["AlexNet"],
+        # "AlexNet": models["AlexNet"],
         "GoogLeNet": models["GoogLeNet"]
     }
 

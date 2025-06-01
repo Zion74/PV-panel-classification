@@ -1,137 +1,158 @@
-# 智慧能源系统工程 - 光伏板积灰判断项目
+# 光伏板积灰程度智能识别系统
 
-这是一个基于深度学习的光伏板积灰判断项目，旨在通过图像识别技术，自动判断光伏板的积灰程度。本项目使用了 PyTorch 深度学习框架，并提供了训练、评估和预测的完整流程。
+这是一个基于深度学习的光伏板积灰程度识别系统，可以自动识别光伏板的积灰程度，分为三个等级：无积灰、轻微积灰和严重积灰。
 
-## 项目概述
+## 系统要求
 
-随着光伏发电的普及，光伏板表面的积灰问题日益突出，严重影响发电效率。本项目旨在开发一个智能系统，通过分析光伏板图像，自动识别并判断其积灰程度，为光伏电站的运维提供数据支持。
+- Python 3.6+
+- PyTorch 1.7.0+
+- torchvision 0.8.1+
+- PyQt5 5.15.0+
+- 其他依赖见 requirements.txt
 
-## 主要功能
+## 安装
 
-*   **图像数据预处理**：对光伏板图像进行统一尺寸调整和归一化处理。
-*   **深度学习模型训练**：支持使用多种预训练模型（如 MobileNetV2, ResNet18, SimpleCNN）进行迁移学习，对积灰图像进行分类训练。
-*   **模型评估**：在验证集上评估模型的性能，包括准确率、损失等指标。
-*   **图像预测**：提供图形用户界面 (GUI) 进行单张或批量图像的积灰程度预测。
+1. 克隆或下载本项目
+2. 安装依赖：
 
-## 环境配置
+```
+pip install -r requirements.txt
+```
 
-本项目推荐使用 Anaconda 或 Miniconda 创建虚拟环境，并安装所需的依赖。
+## 数据集结构
 
-1.  **创建虚拟环境**：
-    ```bash
-    conda create -n pv_dust python=3.x # 推荐使用 Python 3.8 或更高版本
-    conda activate pv_dust
-    ```
-
-2.  **安装依赖**：
-    项目所需的所有 Python 包都列在 `requirements.txt` 文件中。请确保您的 PyTorch 版本与 `requirements.txt` 中指定的版本兼容，特别是 CUDA 版本（如果使用 GPU）。
-    ```bash
-    pip install -r requirements.txt
-    ```
-    **注意**：`torch==2.6.0+cu126` 表示 PyTorch 2.6.0 版本，支持 CUDA 12.6。请根据您的 GPU 和 CUDA 版本调整此行，或访问 [PyTorch 官方网站](https://pytorch.org/get-started/locally/) 获取适合您环境的安装命令。
-
-## 数据集准备
-
-本项目的数据集应组织在 `data/train` 和 `data/val` 目录下，每个目录下包含按类别划分的子文件夹。例如：
+数据集应按以下结构组织：
 
 ```
 data/
 ├── train/
-│   ├── 0_ashless/       # 无灰尘图像
-│   ├── 1_little_ashes/  # 轻微积灰图像
-│   └── 2_all_ashes/     # 严重积灰图像
+│   ├── 0_ashless/
+│   ├── 1_little_ashes/
+│   └── 2_all_ashes/
 └── val/
     ├── 0_ashless/
     ├── 1_little_ashes/
     └── 2_all_ashes/
 ```
 
-**重要提示**：`data/` 文件夹通常不直接上传到 GitHub，因为它可能包含大量图像数据。请确保您在本地拥有这些数据，或者在 `README.md` 中提供获取数据的说明。
-
-### 计算数据集均值和标准差
-
-在训练模型之前，建议计算训练数据集的均值和标准差，用于图像归一化。您可以使用以下脚本来完成：
-
-```python
-# calculate_mean_std.py (示例代码，请根据实际路径和需求调整)
-import torch
-import torchvision.transforms as transforms
-from torchvision.datasets import ImageFolder
-from torch.utils.data import DataLoader
-
-# 数据集根目录
-data_dir = 'd:\\Documents\\研究生\\课程论文\\智慧能源系统工程\\CV\\data\\train'
-
-# 定义一个简单的转换，只将图片转换为 Tensor
-transform = transforms.Compose([
-    transforms.ToTensor()
-])
-
-# 创建 ImageFolder 数据集
-dataset = ImageFolder(root=data_dir, transform=transform)
-loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
-
-mean = 0.
-std = 0.
-total_images_count = 0
-
-for images, _ in loader:
-    batch_samples = images.size(0)
-    images = images.view(batch_samples, images.size(1), -1)
-    mean += images.mean(2).sum(0)
-    total_images_count += batch_samples
-
-mean /= total_images_count
-
-loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
-
-for images, _ in loader:
-    batch_samples = images.size(0)
-    images = images.view(batch_samples, images.size(1), -1)
-    std += ((images - mean.unsqueeze(1))**2).sum(2).sum(0)
-
-std = torch.sqrt(std / (total_images_count * images.size(2)))
-
-print(f"数据集均值 (Mean): {mean}")
-print(f"数据集标准差 (Std): {std}")
-```
-
-将计算得到的 `mean` 和 `std` 值更新到 `dataset.py` 中的 `transforms.Normalize` 函数中。
-
-## 项目结构
-
-```
-. # 项目根目录
-├── .idea/                 # IDE 配置文件 (通常不上传)
-├── best_model_MobileNetV2.pth # 训练好的 MobileNetV2 模型权重
-├── best_model_ResNet18.pth    # 训练好的 ResNet18 模型权重
-├── best_model_SimpleCNN.pth   # 训练好的 SimpleCNN 模型权重
-├── data/                  # 数据集目录 (通常不上传)
-│   ├── __pycache__/       # Python 缓存文件
-│   ├── train/             # 训练集
-│   └── val/               # 验证集
-├── dataset.py             # 数据集加载和预处理脚本
-├── main.py                # 项目主入口，可能包含训练和评估的逻辑
-├── model.py               # 模型定义脚本 (包含 SimpleCNN, MobileNetV2, ResNet18 等模型)
-├── predict_gui.py         # 预测功能的图形用户界面脚本
-├── requirements.txt       # 项目依赖包列表
-└── train_eval.py          # 模型训练和评估脚本
-```
-
 ## 使用方法
 
 ### 训练模型
 
-运行 `train_eval.py` 脚本来训练模型。您可能需要根据 `train_eval.py` 中的参数进行调整，例如选择不同的模型、设置学习率、批大小等。
+运行以下命令训练模型：
 
-```bash
-python train_eval.py
+```
+python train.py --model resnet18 --epochs 30 --batch_size 32
 ```
 
-### 使用 GUI 进行预测
+可用的模型选项：
 
-运行 `predict_gui.py` 脚本以启动图形用户界面，您可以加载训练好的模型并对新的光伏板图像进行积灰程度预测。
+- simplecnn
+- resnet18
+- resnet50
+- mobilenet_v2
+- mobilenet_v3
+- alexnet
+- googlenet
 
-```bash
+### 比较不同模型
+
+运行以下命令比较不同模型的性能：
+
+```
+python compare_models.py
+```
+
+### 图形界面预测
+
+运行以下命令启动图形界面进行预测：
+
+```
 python predict_gui.py
 ```
+
+## 新版 GUI 界面
+
+新版 GUI 基于 PyQt5 开发，提供了更现代化、更美观的用户界面，功能包括：
+
+1. **模型选择**：可以从 checkpoint 文件夹中选择并加载任意训练好的模型
+2. **图像预测**：支持上传自定义图片进行预测
+3. **随机验证**：可以从验证集中随机选择图片进行预测
+4. **结果展示**：直观显示预测结果、置信度和真实标签（如果有）
+5. **状态反馈**：通过状态栏和颜色编码提供清晰的状态反馈
+
+### GUI 使用步骤
+
+1. 启动应用：`python predict_gui.py`
+2. 从左侧下拉菜单选择一个模型，点击"加载选中模型"
+3. 选择以下操作之一：
+   - 点击"上传图片"按钮上传自定义图片进行预测
+   - 点击"随机验证集图片"按钮从验证集随机选择一张图片进行预测
+4. 查看右侧面板中的预测结果、置信度和真实标签信息
+
+## 构建可执行文件
+
+本项目提供了一个脚本用于将应用程序打包成可执行文件，使其能在没有安装 Python 环境的计算机上运行。
+
+### 前提条件
+
+- 安装 PyInstaller：`pip install pyinstaller`
+- 确保所有依赖项已安装：`pip install -r requirements.txt`
+
+### 构建步骤
+
+1. 运行构建脚本：
+
+```
+python build_executable.py
+```
+
+2. 默认情况下，这将创建一个单文件可执行程序。如果要创建文件夹模式的应用程序，请使用：
+
+```
+python build_executable.py --onefile False
+```
+
+3. 其他可选参数：
+
+   - `--name NAME`：指定输出的可执行文件名称（默认：PV_Panel_Classifier）
+   - `--icon PATH`：指定应用程序图标路径
+   - `--noclean`：保留之前的构建文件
+
+4. 构建完成后，可执行文件将位于`dist`文件夹中。
+
+### 注意事项
+
+- 单文件模式（`--onefile`）会将所有依赖打包到一个.exe 文件中，启动较慢但分发方便
+- 文件夹模式启动更快，但需要分发整个文件夹
+- 确保`checkpoint`文件夹中至少有一个训练好的模型文件（.pth）
+- 确保`data/val`文件夹包含验证数据，以便使用"随机验证集图片"功能
+
+## 模型性能
+
+详细的模型性能比较可以参考：
+
+- final_model_comparison.xlsx
+- model_comparison.xlsx
+- model_training_times.xlsx
+
+## 项目结构
+
+- `train.py`: 模型训练脚本
+- `model.py`: 模型定义
+- `dataset.py`: 数据集加载和预处理
+- `compare_models.py`: 模型比较脚本
+- `predict_gui.py`: 图形界面预测程序
+- `main.py`: 主程序入口
+- `build_executable.py`: 构建可执行文件脚本
+- `checkpoint/`: 保存训练好的模型
+- `data/`: 数据集目录
+- `results/`: 保存结果和日志
+
+## 许可证
+
+MIT
+
+## 联系方式
+
+如有问题，请提交 Issue 或 Pull Request。
