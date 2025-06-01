@@ -2,6 +2,7 @@ import torch
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
 from sklearn.metrics import classification_report, roc_curve, auc
 
 def evaluate_model(model, dataloader, device):
@@ -25,6 +26,7 @@ def evaluate_model(model, dataloader, device):
     
     return accuracy
 
+
 def train(model, train_loader, val_loader, criterion, optimizer, device, epochs=10, model_name="model"):
     model.to(device)
     best_acc = 0.0  # 初始化最佳准确率
@@ -39,13 +41,20 @@ def train(model, train_loader, val_loader, criterion, optimizer, device, epochs=
     val_losses = []
     val_accs = []
     epochs_list = []
+    epoch_times = []  # 记录每个epoch的训练时间
+    
+    # 记录总训练开始时间
+    total_start_time = time.time()
 
     for epoch in range(epochs):
+        # 记录每个epoch的开始时间
+        epoch_start_time = time.time()
+        
         # 训练阶段
         model.train()
         total_loss = 0
-        correct = 0
-        total = 0
+        train_correct = 0
+        train_total = 0
         
         for X, y in train_loader:
             X, y = X.to(device), y.to(device)
@@ -57,13 +66,13 @@ def train(model, train_loader, val_loader, criterion, optimizer, device, epochs=
             total_loss += loss.item()
             
             # 计算训练准确率
-            _, predicted = torch.max(out.data, 1)
-            total += y.size(0)
-            correct += (predicted == y).sum().item()
+            predicted = torch.argmax(out, dim = 1)
+            train_total += y.size(0)
+            train_correct += (predicted == y).sum().item()
         
         # 计算平均训练损失和准确率
         avg_train_loss = total_loss / len(train_loader)
-        train_accuracy = correct / total
+        train_accuracy = train_correct / train_total
         
         # 验证阶段
         model.eval()
@@ -76,8 +85,8 @@ def train(model, train_loader, val_loader, criterion, optimizer, device, epochs=
                 val_loss += loss.item()
         
         avg_val_loss = val_loss / len(val_loader)
-        val_accuracy = evaluate_model(model, val_loader, device)
-        
+        val_accuracy = evaluate_model(model, val_loader, device)   
+
         # 记录结果
         epochs_list.append(epoch + 1)
         train_losses.append(avg_train_loss)
@@ -85,8 +94,12 @@ def train(model, train_loader, val_loader, criterion, optimizer, device, epochs=
         val_losses.append(avg_val_loss)
         val_accs.append(val_accuracy)
         
-        if epoch % 10 == 0 or epoch == epochs - 1:
-            print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.4f}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.4f}")
+        # 计算并记录本epoch的训练时间
+        epoch_end_time = time.time()
+        epoch_time = epoch_end_time - epoch_start_time
+        epoch_times.append(epoch_time)
+        
+        print(f"Model {model_name}, Epoch {epoch + 1}/{epochs}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.4f}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.4f}, Time: {epoch_time:.2f}s")
 
         # 保存最优模型
         if val_accuracy > best_acc:
@@ -94,6 +107,12 @@ def train(model, train_loader, val_loader, criterion, optimizer, device, epochs=
             save_path = f"checkpoint/best_model_{model_name}.pth"
             torch.save(model.state_dict(), save_path)
             print(f"✅ 新最佳模型已保存: {save_path}，验证准确率: {val_accuracy:.4f}")
+    
+    # 计算总训练时间和平均每个epoch的时间
+    total_train_time = time.time() - total_start_time
+    avg_epoch_time = sum(epoch_times) / len(epoch_times) if epoch_times else 0
+    
+    print(f"总训练时间: {total_train_time:.2f}s, 平均每个epoch时间: {avg_epoch_time:.2f}s")
     
     # 保存训练结果为Excel
     results_df = pd.DataFrame({
@@ -104,34 +123,55 @@ def train(model, train_loader, val_loader, criterion, optimizer, device, epochs=
         'Validation Accuracy': val_accs
     })
     
+    # 创建时间信息的DataFrame
+    time_df = pd.DataFrame({
+        'Epoch': epochs_list,
+        'Epoch时间(秒)': epoch_times
+    })
+    
+    # 创建总结时间信息的DataFrame
+    time_summary_df = pd.DataFrame({
+        '总训练时间(秒)': [total_train_time],
+        '平均每个Epoch时间(秒)': [avg_epoch_time]
+    })
+    
     excel_path = f"{results_dir}/training_results.xlsx"
-    results_df.to_excel(excel_path, index=False)
+    with pd.ExcelWriter(excel_path) as writer:
+        results_df.to_excel(writer, sheet_name='Metrics', index=False)
+        time_df.to_excel(writer, sheet_name='Time Details', index=False)
+        time_summary_df.to_excel(writer, sheet_name='Time Info', index=False)
     print(f"✅ 训练结果已保存至: {excel_path}")
     
-    # 绘制损失曲线
+    # 绘制训练曲线
     plt.figure(figsize=(12, 5))
+    # 设置字体以避免中文乱码和Times New Roman字体缺失问题
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica'] # 或者其他通用字体，如 'Arial'
+    plt.rcParams['axes.unicode_minus'] = False # 解决负号显示问题
+    # 1. Loss曲线（使用默认配色）
     plt.subplot(1, 2, 1)
-    plt.plot(epochs_list, train_losses, 'b-', label='训练损失')
-    plt.plot(epochs_list, val_losses, 'r-', label='验证损失')
-    plt.title(f'{model_name} - 损失曲线')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
+    plt.plot(epochs_list, train_losses, label='Train Loss', marker='o', markersize=4)
+    plt.plot(epochs_list, val_losses, label='Validation Loss', marker='s', markersize=4)
+    plt.title(f'{model_name} - Loss Curves', fontsize=12, pad=10)
+    plt.xlabel('Epoch', fontsize=10)
+    plt.ylabel('Loss', fontsize=10)
+    plt.legend(frameon=True)
+    plt.grid(True, linestyle='--', alpha=0.5)
     
-    # 绘制准确率曲线
+    # 2. Accuracy曲线（使用默认配色）
     plt.subplot(1, 2, 2)
-    plt.plot(epochs_list, train_accs, 'b-', label='训练准确率')
-    plt.plot(epochs_list, val_accs, 'r-', label='验证准确率')
-    plt.title(f'{model_name} - 准确率曲线')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.legend()
+    plt.plot(epochs_list, train_accs, label='Train Accuracy', marker='o', markersize=4)
+    plt.plot(epochs_list, val_accs, label='Validation Accuracy', marker='s', markersize=4)
+    plt.title(f'{model_name} - Accuracy Curves', fontsize=12, pad=10)
+    plt.xlabel('Epoch', fontsize=10)
+    plt.ylabel('Accuracy', fontsize=10)
+    plt.legend(frameon=True)
+    plt.grid(True, linestyle='--', alpha=0.5)
     
-    # 保存图像
+    # 调整布局并保存
     plt.tight_layout()
-    plt.savefig(f"{results_dir}/training_curves.png")
+    plt.savefig(f"results/{model_name}/training_curves.png", dpi=300, bbox_inches='tight')
     plt.close()
     print(f"✅ 训练曲线已保存至: {results_dir}/training_curves.png")
     
-    return best_acc
+    return best_acc, total_train_time, avg_epoch_time
 

@@ -37,7 +37,7 @@ def calculate_mean_std(data_dir):
     for images, _ in train_loader:
         batch_size = images.size(0)
         images = images.view(batch_size, images.size(1), -1)
-        std += ((images - mean.unsqueeze(1).unsqueeze(2))**2).sum([0, 2])
+        std += ((images - mean.unsqueeze(0).unsqueeze(2))**2).sum([0, 2])
     
     std = torch.sqrt(std / (total_images * 224 * 224))
     

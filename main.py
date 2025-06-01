@@ -1,5 +1,6 @@
 import torch
 import torch.optim as optim
+import pandas as pd
 from dataset import get_dataloaders
 from model import (
     SimpleCNN, get_resnet18, get_resnet50, get_mobilenet_v2, 
@@ -7,6 +8,7 @@ from model import (
 )
 from train import train
 import os
+import subprocess
 
 if __name__ == "__main__":
     data_dir = r"./data"
@@ -36,16 +38,50 @@ if __name__ == "__main__":
         "SimpleCNN": models["SimpleCNN"],
         "ResNet18": models["ResNet18"],
         "MobileNetV2": models["MobileNetV2"],
-        # 取消注释以训练其他模型
-        # "ResNet50": models["ResNet50"],
-        # "MobileNetV3": models["MobileNetV3"],
-        # "AlexNet": models["AlexNet"],
-        # "GoogLeNet": models["GoogLeNet"]
+        "ResNet50": models["ResNet50"],
+        "MobileNetV3": models["MobileNetV3"],
+        "AlexNet": models["AlexNet"],
+        "GoogLeNet": models["GoogLeNet"]
     }
 
+    # 创建一个列表来存储每个模型的训练时间信息
+    time_results = []
+    
     for name, model in selected_models.items():
         print(f"\n{'='*50}\n训练模型: {name}\n{'='*50}")
         optimizer = optim.Adam(model.parameters(), lr=1e-4)
         criterion = torch.nn.CrossEntropyLoss()
-        train(model, train_loader, val_loader, criterion, optimizer, device, epochs=20, model_name=name)
+        best_acc, total_train_time, avg_epoch_time = train(model, train_loader, val_loader, criterion, optimizer, device, epochs=10, model_name=name)
+        
+        # 将时间信息添加到结果列表中
+        time_results.append({
+            'model_name': name,
+            'total_train_time': total_train_time,
+            'avg_epoch_time': avg_epoch_time
+        })
+    
+    # 将所有模型的训练时间信息保存到Excel文件
+    time_df = pd.DataFrame(time_results)
+    time_excel_path = "model_training_times.xlsx"
+    time_df.to_excel(time_excel_path, index=False)
+    print(f"\n✅ 所有模型的训练时间信息已保存至: {time_excel_path}")
+    
+    # 所有模型训练完成后，运行模型比较脚本
+    print("\n所有模型训练完成，开始比较模型性能...")
+    try:
+        # 方法1：使用subprocess运行脚本
+        subprocess.run(["python", "compare_models.py"], check=True)
+    except Exception as e:
+        print(f"运行模型比较脚本时出错: {e}")
+        # 方法2：如果subprocess失败，直接导入并运行
+        try:
+            from compare_models import compare_models
+            compare_models()
+        except Exception as e2:
+            print(f"导入并运行模型比较函数时出错: {e2}")
+    
+    print("\n程序执行完毕！请查看以下文件获取结果：")
+    print("1. model_comparison.xlsx - 所有模型的性能比较结果")
+    print("2. model_training_times.xlsx - 所有模型的训练时间信息")
+    print("3. 各模型results目录下的training_results.xlsx - 每个模型的详细训练过程和时间信息")
 
