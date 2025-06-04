@@ -142,6 +142,8 @@ class PVPanelClassifier(QMainWindow):
         self.model = None
         self.model_name = ""
         self.val_dataset = None
+        self.train_dataset = None
+        self.test_dataset = None
         self.current_image_path = ""
         self.model_files = {}  # 存储模型名称到文件路径的映射
         
@@ -151,7 +153,7 @@ class PVPanelClassifier(QMainWindow):
     def init_ui(self):
         # 设置窗口基本属性
         self.setWindowTitle("光伏板积灰程度智能识别系统")
-        self.setMinimumSize(900, 700)
+        self.setMinimumSize(1200, 900)
         
         # 创建主窗口部件
         main_widget = QWidget()
@@ -185,7 +187,7 @@ class PVPanelClassifier(QMainWindow):
         control_panel.setStyleSheet("""
             QGroupBox {
                 font-family: 'Microsoft YaHei';
-                font-size: 14px;
+                font-size: 20px;
                 font-weight: bold;
                 border: 1px solid #BDC3C7;
                 border-radius: 8px;
@@ -209,7 +211,7 @@ class PVPanelClassifier(QMainWindow):
         model_group.setStyleSheet("""
             QGroupBox {
                 font-family: 'Microsoft YaHei';
-                font-size: 13px;
+                font-size: 18px;
                 border: 1px solid #D5DBDB;
                 border-radius: 6px;
                 margin-top: 10px;
@@ -274,7 +276,7 @@ class PVPanelClassifier(QMainWindow):
         image_group.setStyleSheet("""
             QGroupBox {
                 font-family: 'Microsoft YaHei';
-                font-size: 13px;
+                font-size: 18px;
                 border: 1px solid #D5DBDB;
                 border-radius: 6px;
                 margin-top: 10px;
@@ -290,6 +292,35 @@ class PVPanelClassifier(QMainWindow):
         """)
         image_layout = QVBoxLayout(image_group)
         image_layout.setSpacing(12)
+        
+        # 数据集选择
+        dataset_label = QLabel("选择数据集:")
+        dataset_label.setFont(QFont(CHINESE_FONT, 10))
+        dataset_label.setStyleSheet("color: #34495E; margin-bottom: 5px;")
+        image_layout.addWidget(dataset_label)
+        
+        self.dataset_combo = QComboBox()
+        self.dataset_combo.addItems(["训练集", "验证集", "测试集"])
+        self.dataset_combo.setCurrentText("测试集")  # 默认选择验证集
+        self.dataset_combo.setStyleSheet("""
+            QComboBox {
+                font-family: 'Microsoft YaHei', 'Arial';
+                border: 1px solid #BDC3C7;
+                border-radius: 5px;
+                padding: 6px;
+                min-height: 25px;
+                background-color: white;
+            }
+            QComboBox::drop-down {
+                border: 0px;
+                width: 25px;
+            }
+            QComboBox QAbstractItemView {
+                font-family: 'Microsoft YaHei', 'Arial';
+                selection-background-color: #3498DB;
+            }
+        """)
+        image_layout.addWidget(self.dataset_combo)
         
         self.upload_img_btn = QPushButton("上传图片")
         self.upload_img_btn.setStyleSheet("""
@@ -311,7 +342,7 @@ class PVPanelClassifier(QMainWindow):
         """)
         image_layout.addWidget(self.upload_img_btn)
         
-        self.random_img_btn = QPushButton("随机验证集图片")
+        self.random_img_btn = QPushButton("随机选择图片")
         self.random_img_btn.setStyleSheet("""
             QPushButton {
                 font-family: 'Microsoft YaHei';
@@ -338,7 +369,7 @@ class PVPanelClassifier(QMainWindow):
         info_group.setStyleSheet("""
             QGroupBox {
                 font-family: 'Microsoft YaHei';
-                font-size: 13px;
+                font-size: 18px;
                 border: 1px solid #D5DBDB;
                 border-radius: 6px;
                 margin-top: 10px;
@@ -366,11 +397,11 @@ class PVPanelClassifier(QMainWindow):
         control_layout.addStretch(1)
         
         # 右侧：结果显示
-        result_panel = QGroupBox("识别结果")
+        result_panel = QGroupBox("图片")
         result_panel.setStyleSheet("""
             QGroupBox {
                 font-family: 'Microsoft YaHei';
-                font-size: 14px;
+                font-size: 20px;
                 font-weight: bold;
                 border: 1px solid #BDC3C7;
                 border-radius: 8px;
@@ -408,7 +439,7 @@ class PVPanelClassifier(QMainWindow):
         result_group.setStyleSheet("""
             QGroupBox {
                 font-family: 'Microsoft YaHei';
-                font-size: 13px;
+                font-size: 18px;
                 border: 1px solid #D5DBDB;
                 border-radius: 6px;
                 margin-top: 10px;
@@ -425,11 +456,19 @@ class PVPanelClassifier(QMainWindow):
         result_details_layout = QVBoxLayout(result_group)
         result_details_layout.setSpacing(15)
         
+        # 预测结果标签 - 字体与真实标签一致
         self.result_label = QLabel("等待预测...")
         self.result_label.setAlignment(Qt.AlignCenter)
-        self.result_label.setFont(QFont(CHINESE_FONT, 14, QFont.Bold))
+        self.result_label.setFont(QFont(CHINESE_FONT, 14))  # 与真实标签字体一致
         self.result_label.setStyleSheet("color: #2C3E50; margin: 10px; letter-spacing: 1px;")
         result_details_layout.addWidget(self.result_label)
+        
+        # 真实标签 - 移到预测标签下面
+        self.true_label = QLabel("真实标签: 未知")
+        self.true_label.setAlignment(Qt.AlignCenter)
+        self.true_label.setFont(QFont(CHINESE_FONT, 14))  # 稍小一些的字体
+        self.true_label.setStyleSheet("color: #34495E; padding: 5px; margin-top: 5px;")
+        result_details_layout.addWidget(self.true_label)
         
         # 置信度进度条 - 使用水平布局使文本显示在右侧
         confidence_layout = QHBoxLayout()
@@ -451,23 +490,16 @@ class PVPanelClassifier(QMainWindow):
                 border-radius: 4px;
             }
         """)
-        confidence_layout.addWidget(self.confidence_bar, 7)  # 进度条占70%宽度
+        confidence_layout.addWidget(self.confidence_bar, 8)  # 进度条占70%宽度
         
         # 添加置信度文本标签
         self.confidence_label = QLabel("置信度: 0%")
         self.confidence_label.setFont(QFont(CHINESE_FONT, 11))
         self.confidence_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         self.confidence_label.setStyleSheet("color: #34495E; padding-left: 10px;")
-        confidence_layout.addWidget(self.confidence_label, 3)  # 文本占30%宽度
+        confidence_layout.addWidget(self.confidence_label, 2)  # 文本占30%宽度
         
         result_details_layout.addLayout(confidence_layout)
-        
-        # 真实标签
-        self.true_label = QLabel("真实标签: 未知")
-        self.true_label.setAlignment(Qt.AlignCenter)
-        self.true_label.setFont(QFont(CHINESE_FONT, 12))
-        self.true_label.setStyleSheet("color: #34495E; padding: 5px;")
-        result_details_layout.addWidget(self.true_label)
         
         result_layout.addWidget(result_group)
         
@@ -623,21 +655,51 @@ class PVPanelClassifier(QMainWindow):
             self.model_info_label.setText(f"当前模型: {self.model_name}\n文件: {model_file}")
             self.statusBar().showMessage(f"成功加载模型: {self.model_name}")
             
-            # 加载验证集
-            self.load_val_dataset()
+            # 加载数据集
+            self.load_datasets()
             
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载模型失败: {str(e)}")
             self.statusBar().showMessage(f"加载模型失败: {str(e)}")
 
-    def load_val_dataset(self):
-        """加载验证集数据"""
+    def load_datasets(self):
+        """加载所有数据集"""
         try:
             data_dir = "./data"
-            self.val_dataset = datasets.ImageFolder(root=f"{data_dir}/val", transform=transform)
-            self.statusBar().showMessage(f"已加载验证集，共 {len(self.val_dataset)} 张图片")
+            
+            # 加载验证集
+            if os.path.exists(f"{data_dir}/val"):
+                self.val_dataset = datasets.ImageFolder(root=f"{data_dir}/val", transform=transform)
+                val_count = len(self.val_dataset)
+            else:
+                self.val_dataset = None
+                val_count = 0
+            
+            # 加载训练集
+            if os.path.exists(f"{data_dir}/train"):
+                self.train_dataset = datasets.ImageFolder(root=f"{data_dir}/train", transform=transform)
+                train_count = len(self.train_dataset)
+            else:
+                self.train_dataset = None
+                train_count = 0
+            
+            # 加载测试集
+            if os.path.exists(f"{data_dir}/test"):
+                self.test_dataset = datasets.ImageFolder(root=f"{data_dir}/test", transform=transform)
+                test_count = len(self.test_dataset)
+            else:
+                self.test_dataset = None
+                test_count = 0
+            
+            status_msg = f"已加载数据集 - 训练集: {train_count}, 验证集: {val_count}, 测试集: {test_count} 张图片"
+            self.statusBar().showMessage(status_msg)
+            
         except Exception as e:
-            self.statusBar().showMessage(f"加载验证集失败: {str(e)}")
+            self.statusBar().showMessage(f"加载数据集失败: {str(e)}")
+    
+    def load_val_dataset(self):
+        """保持向后兼容的验证集加载方法"""
+        self.load_datasets()
     
     def upload_image(self):
         """上传图片并预测"""
@@ -668,27 +730,48 @@ class PVPanelClassifier(QMainWindow):
             self.statusBar().showMessage(f"处理图片失败: {str(e)}")
     
     def random_val_image(self):
-        """随机选择验证集图片并预测"""
+        """随机选择指定数据集图片并预测"""
         if self.model is None:
             QMessageBox.warning(self, "警告", "请先加载模型")
             return
+        
+        # 获取选择的数据集
+        selected_dataset = self.dataset_combo.currentText()
+        dataset = None
+        
+        if selected_dataset == "训练集":
+            dataset = self.train_dataset
+        elif selected_dataset == "验证集":
+            dataset = self.val_dataset
+        elif selected_dataset == "测试集":
+            dataset = self.test_dataset
+        
+        # 检查数据集是否存在
+        if dataset is None:
+            self.load_datasets()
             
-        if self.val_dataset is None:
-            self.load_val_dataset()
-            if self.val_dataset is None:
-                QMessageBox.warning(self, "警告", "无法加载验证集数据")
+            # 重新获取数据集
+            if selected_dataset == "训练集":
+                dataset = self.train_dataset
+            elif selected_dataset == "验证集":
+                dataset = self.val_dataset
+            elif selected_dataset == "测试集":
+                dataset = self.test_dataset
+            
+            if dataset is None:
+                QMessageBox.warning(self, "警告", f"无法加载{selected_dataset}数据")
                 return
-                
+        
         # 随机选择一张图片
-        idx = random.randint(0, len(self.val_dataset) - 1)
-        img_path = self.val_dataset.imgs[idx][0]
+        idx = random.randint(0, len(dataset) - 1)
+        img_path = dataset.imgs[idx][0]
         
         # 显示图片
         self.display_image(img_path)
         self.current_image_path = img_path
         
         # 开始预测
-        self.statusBar().showMessage("正在预测...")
+        self.statusBar().showMessage(f"正在预测{selected_dataset}图片...")
         self.prediction_thread = PredictionThread(self.model, img_path)
         self.prediction_thread.finished.connect(self.update_prediction_result)
         self.prediction_thread.start()
@@ -717,69 +800,63 @@ class PVPanelClassifier(QMainWindow):
             self.result_label.setText(f"预测失败: {true_label}")
             self.confidence_bar.setValue(0)
             self.confidence_label.setText("置信度: 0%")
+            self.true_label.setText("真实标签: 未知")
             self.statusBar().showMessage("预测失败")
             return
             
-        # 更新预测结果标签
+        # 更新预测结果标签 - 添加预测成功标识
         class_name = CLASS_NAMES[pred_idx]
         class_desc = CLASS_DESCRIPTIONS[class_name]
-        self.result_label.setText(f"预测标签：{class_desc} ({class_name})")
         
-        # 根据预测结果设置不同颜色
+        # 判断预测是否成功
+        prediction_success = true_label in CLASS_NAMES and true_label == class_name
+        
+        # 在预测结果后添加"(预测成功)"字样
+        success_text = " (预测成功)" if prediction_success else ""
+        self.result_label.setText(f"预测结果：{class_desc}{success_text}")
+        
+        # 根据预测结果设置不同颜色（保持字体大小为30pt）
         if pred_idx == 0:  # 无积灰
-            self.result_label.setStyleSheet("color: #27AE60; font-size: 16px; font-weight: bold; font-family: 'Microsoft YaHei', 'Arial';")
-            self.confidence_bar.setStyleSheet("""
-                QProgressBar { 
-                    border: 1px solid #BDC3C7;
-                    border-radius: 5px;
-                    background-color: #F5F5F5;
-                }
-                QProgressBar::chunk { 
-                    background-color: #27AE60; 
-                    border-radius: 4px;
-                }
-            """)
+            self.result_label.setStyleSheet("color: #27AE60; font-size: 30px; font-weight: bold; font-family: 'Microsoft YaHei', 'Arial'; margin: 10px;")
         elif pred_idx == 1:  # 轻微积灰
-            self.result_label.setStyleSheet("color: #F39C12; font-size: 16px; font-weight: bold; font-family: 'Microsoft YaHei', 'Arial';")
-            self.confidence_bar.setStyleSheet("""
-                QProgressBar { 
-                    border: 1px solid #BDC3C7;
-                    border-radius: 5px;
-                    background-color: #F5F5F5;
-                }
-                QProgressBar::chunk { 
-                    background-color: #F39C12; 
-                    border-radius: 4px;
-                }
-            """)
+            self.result_label.setStyleSheet("color: #F39C12; font-size: 30px; font-weight: bold; font-family: 'Microsoft YaHei', 'Arial'; margin: 10px;")
         else:  # 严重积灰
-            self.result_label.setStyleSheet("color: #E74C3C; font-size: 16px; font-weight: bold; font-family: 'Microsoft YaHei', 'Arial';")
-            self.confidence_bar.setStyleSheet("""
-                QProgressBar { 
-                    border: 1px solid #BDC3C7;
-                    border-radius: 5px;
-                    background-color: #F5F5F5;
-                }
-                QProgressBar::chunk { 
-                    background-color: #E74C3C; 
-                    border-radius: 4px;
-                }
-            """)
+            self.result_label.setStyleSheet("color: #E74C3C; font-size: 30px; font-weight: bold; font-family: 'Microsoft YaHei', 'Arial'; margin: 10px;")
         
-        # 更新置信度
+        # 更新置信度 - 根据置信度大小设置颜色
         confidence_value = int(confidence * 100)
         self.confidence_bar.setValue(confidence_value)
         self.confidence_label.setText(f"置信度: {confidence_value}%")
         
+        # 根据置信度设置进度条颜色
+        if confidence_value >= 90:  # 90%以上绿色
+            confidence_color = "#27AE60"
+        elif confidence_value >= 70:  # 70%-90%黄色
+            confidence_color = "#F39C12"
+        else:  # 70%以下红色
+            confidence_color = "#E74C3C"
+        
+        self.confidence_bar.setStyleSheet(f"""
+            QProgressBar {{ 
+                border: 1px solid #BDC3C7;
+                border-radius: 5px;
+                background-color: #F5F5F5;
+            }}
+            QProgressBar::chunk {{ 
+                background-color: {confidence_color}; 
+                border-radius: 4px;
+            }}
+        """)
+        
         # 更新真实标签
         if true_label in CLASS_NAMES:
-            self.true_label.setText(f"真实标签: {CLASS_DESCRIPTIONS[true_label]} ({true_label})")
+            true_desc = CLASS_DESCRIPTIONS[true_label]
+            self.true_label.setText(f"真实标签: {true_desc}")
         else:
             self.true_label.setText("真实标签: 未知")
         
         self.statusBar().showMessage(f"预测完成 | 类别: {class_desc} ({class_name}) | 置信度: {confidence:.2f}")
-
-# 主函数
+        # 主函数
 def main():
     # 创建应用
     app = QApplication(sys.argv)
